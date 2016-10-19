@@ -138,7 +138,10 @@ contract StandardToken is Token {
  *
  */
 contract ContingencyToken is StandardToken, SafeMath {
-
+    /*
+        Modified version of the FirstBlood.io token and token sale
+    */
+    
     string public name = "Contingency Token";
     string public symbol = "CTY";
     uint public decimals = 18;
