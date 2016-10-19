@@ -153,13 +153,15 @@ contract ContingencyToken is StandardToken, SafeMath {
     address public founder = 0x0;
 
     uint public etherCap = 708333 * 10**18; //max amount raised during crowdsale (8.5M USD worth of ether will be measured with a moving average market price at beginning of the crowdsale)
-    uint public transferLockup = 370285; //transfers are locked for this many blocks after endBlock (assuming 14 second blocks, this is 2 months)
+    uint public transferLockup = 185142; //transfers are locked for this many blocks after endBlock (assuming 14 second blocks, this is 1 month)
     uint public founderLockup = 2252571; //founder allocation cannot be created until this many blocks after endBlock (assuming 14 second blocks, this is 1 year)
-    //uint public bountyAllocation = 2500000 * 10**18; //2.5M tokens allocated post-crowdsale for the bounty fund
-    //uint public ecosystemAllocation = 5 * 10**16; //5% of token supply allocated post-crowdsale for the ecosystem fund
+    /* Extra bounty or ecosystem allocation for founders disabled for contingency
+    uint public bountyAllocation = 2500000 * 10**18; //2.5M tokens allocated post-crowdsale for the bounty fund
+    uint public ecosystemAllocation = 5 * 10**16; //5% of token supply allocated post-crowdsale for the ecosystem fund
+    bool public bountyAllocated = false; //this will change to true when the bounty fund is allocated
+    bool public ecosystemAllocated = false; //this will change to true when the ecosystem fund is allocated
+    */
     uint public founderAllocation = 10 * 10**16; //10% of token supply allocated post-crowdsale for the founder allocation
-    //bool public bountyAllocated = false; //this will change to true when the bounty fund is allocated
-    //bool public ecosystemAllocated = false; //this will change to true when the ecosystem fund is allocated
     bool public founderAllocated = false; //this will change to true when the founder fund is allocated
     uint public presaleTokenSupply = 0; //this will keep track of the token supply created during the crowdsale
     uint public presaleEtherRaised = 0; //this will keep track of the Ether raised during the crowdsale
@@ -249,7 +251,7 @@ contract ContingencyToken is StandardToken, SafeMath {
         if (msg.sender!=founder) throw;
         if (block.number <= endBlock + founderLockup) throw;
         if (founderAllocated) throw;
-        //if (!bountyAllocated || !ecosystemAllocated) throw;
+        //if (!bountyAllocated || !ecosystemAllocated) throw; // Extra bounty or ecosystem allocation for founders disabled for contingency
         balances[founder] = safeAdd(balances[founder], presaleTokenSupply * founderAllocation / (1 ether));
         totalSupply = safeAdd(totalSupply, presaleTokenSupply * founderAllocation / (1 ether));
         founderAllocated = true;
@@ -273,7 +275,7 @@ contract ContingencyToken is StandardToken, SafeMath {
      *
      */
      
-     /*
+     /* Extra bounty or ecosystem allocation for founders disabled for contingency
     function allocateBountyAndEcosystemTokens() {
         if (msg.sender!=founder) throw;
         if (block.number <= endBlock) throw;
