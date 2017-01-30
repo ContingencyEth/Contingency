@@ -1,8 +1,21 @@
 /**
+ *  _____             _   _                                   
+ * /  __ \           | | (_)                                  
+ * | /  \/ ___  _ __ | |_ _ _ __   __ _  ___ _ __   ___ _   _ 
+ * | |    / _ \| '_ \| __| | '_ \ / _` |/ _ \ '_ \ / __| | | |
+ * | \__/\ (_) | | | | |_| | | | | (_| |  __/ | | | (__| |_| |
+ *  \____/\___/|_| |_|\__|_|_| |_|\__, |\___|_| |_|\___|\__, |
+ *                                 __/ |                 __/ |
+ *                                |___/                 |___/ 
+ *
+ */
+
+/**
  * Overflow aware uint math functions.
  *
  * Inspired by https://github.com/MakerDAO/maker-otc/blob/master/contracts/simple_market.sol
  */
+pragma solidity ^0.4.8;
 contract SafeMath {
   //internals
 
@@ -131,7 +144,7 @@ contract StandardToken is Token {
 
 
 /**
- * Contingency crowdsale crowdsale contract.
+ * Contingency crowdsale contract. Modified from FirstBlood crowdsale contract.
  *
  * Security criteria evaluated against http://ethereum.stackexchange.com/questions/8551/methodological-security-review-of-a-smart-contract
  *
@@ -145,22 +158,17 @@ contract ContingencyToken is StandardToken, SafeMath {
     string public name = "Contingency Token";
     string public symbol = "CTY";
     uint public decimals = 18;
-    uint public startBlock; //crowdsale start block (set in constructor)
-    uint public endBlock; //crowdsale end block (set in constructor)
+    uint public startBlock = 3100000; //crowdsale start block
+    uint public endBlock = 3272800; //crowdsale end block
 
-    // Initial founder address (set in constructor)
-    // All deposited ETH will be instantly forwarded to this address.
-    address public founder = 0x0;
+    // Initial founder address
+    // All deposited ETH will be forwarded to this address.
+    address public founder = 0x4485f44aa1f99b43BD6400586C1B2A02ec263Ec0;
 
-    uint public etherCap = 708333 * 10**18; //max amount raised during crowdsale (8.5M USD worth of ether will be measured with a moving average market price at beginning of the crowdsale)
-    uint public transferLockup = 185142; //transfers are locked for this many blocks after endBlock (assuming 14 second blocks, this is 1 month)
-    uint public founderLockup = 2252571; //founder allocation cannot be created until this many blocks after endBlock (assuming 14 second blocks, this is 1 year)
-    /* Extra bounty or ecosystem allocation for founders disabled for contingency
-    uint public bountyAllocation = 2500000 * 10**18; //2.5M tokens allocated post-crowdsale for the bounty fund
-    uint public ecosystemAllocation = 5 * 10**16; //5% of token supply allocated post-crowdsale for the ecosystem fund
-    bool public bountyAllocated = false; //this will change to true when the bounty fund is allocated
-    bool public ecosystemAllocated = false; //this will change to true when the ecosystem fund is allocated
-    */
+    uint public etherCap = 850000 * 10**18; //max amount raised during crowdsale (8.5M USD worth of ether will be measured with a moving average market price at beginning of the crowdsale)
+    uint public transferLockup = 370284; //transfers are locked for this many blocks after endBlock (assuming 14 second blocks, this is 2 months)
+    uint public founderLockup = 1126285; //founder allocation cannot be created until this many blocks after endBlock (assuming 14 second blocks, this is 6 months)
+
     uint public founderAllocation = 10 * 10**16; //10% of token supply allocated post-crowdsale for the founder allocation
     bool public founderAllocated = false; //this will change to true when the founder fund is allocated
     uint public presaleTokenSupply = 0; //this will keep track of the token supply created during the crowdsale
@@ -169,13 +177,6 @@ contract ContingencyToken is StandardToken, SafeMath {
     event Buy(address indexed sender, uint eth, uint fbt);
     event Withdraw(address indexed sender, address to, uint eth);
     event AllocateFounderTokens(address indexed sender);
-    event AllocateBountyAndEcosystemTokens(address indexed sender);
-
-    function ContingencyToken(address founderInput, uint startBlockInput, uint endBlockInput) {
-        founder = founderInput;
-        startBlock = startBlockInput;
-        endBlock = endBlockInput;
-    }
 
     /**
      * Security review
@@ -198,7 +199,7 @@ contract ContingencyToken is StandardToken, SafeMath {
     }
 
     // Buy entry point
-    function() {
+    function() payable {
         buyRecipient(msg.sender);
     }
 
@@ -220,22 +221,27 @@ contract ContingencyToken is StandardToken, SafeMath {
      * - Test buying after the sale ends
      *
      */
-    function buyRecipient(address recipient) {
+    function buyRecipient(address recipient) payable {
         if (block.number<startBlock || block.number>endBlock || safeAdd(presaleEtherRaised,msg.value)>etherCap || halted) throw;
         uint tokens = safeMul(msg.value, price());
         balances[recipient] = safeAdd(balances[recipient], tokens);
         totalSupply = safeAdd(totalSupply, tokens);
         presaleEtherRaised = safeAdd(presaleEtherRaised, msg.value);
 
-        if (!founder.call.value(msg.value)()) throw; //immediately send Ether to founder address
+        //if (!founder.send(msg.value)) throw; //immediately send Ether to founder address
+        //Due to Metamask not sending enough gas with this method, we send ether later with the function "founderWithdraw" below
 
         Buy(recipient, msg.value, tokens);
+    }
+    
+    function founderWithdraw(uint amount) {
+        // Founder to receive presale ether
+        if (msg.sender!=founder) throw;
+        if (!founder.send(amount)) throw;
     }
 
     /**
      * Set up founder address token balance.
-     *
-     * allocateBountyAndEcosystemTokens() must be calld first.
      *
      * Security review
      *
@@ -257,39 +263,6 @@ contract ContingencyToken is StandardToken, SafeMath {
         founderAllocated = true;
         AllocateFounderTokens(msg.sender);
     }
-
-    /**
-     * Set up founder address token balance.
-     *
-     * Set up bounty pool.
-     *
-     * Security review
-     *
-     * - Integer math: ok - only called once with fixed parameters
-     *
-     * Applicable tests:
-     *
-     * - Test founder token allocation too early
-     * - Test founder token allocation on time
-     * - Test founder token allocation twice
-     *
-     */
-     
-     /* Extra bounty or ecosystem allocation for founders disabled for contingency
-    function allocateBountyAndEcosystemTokens() {
-        if (msg.sender!=founder) throw;
-        if (block.number <= endBlock) throw;
-        if (bountyAllocated || ecosystemAllocated) throw;
-        presaleTokenSupply = totalSupply;
-        balances[founder] = safeAdd(balances[founder], presaleTokenSupply * ecosystemAllocation / (1 ether));
-        totalSupply = safeAdd(totalSupply, presaleTokenSupply * ecosystemAllocation / (1 ether));
-        balances[founder] = safeAdd(balances[founder], bountyAllocation);
-        totalSupply = safeAdd(totalSupply, bountyAllocation);
-        bountyAllocated = true;
-        ecosystemAllocated = true;
-        AllocateBountyAndEcosystemTokens(msg.sender);
-    }
-    */
 
     /**
      * Emergency Stop crowdsale.
